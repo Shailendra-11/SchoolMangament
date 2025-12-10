@@ -159,6 +159,36 @@ const loginUser = async (req, res) => {
 }
 
 
+const getProfile = async (req, res) => {
+     try {
+          const user = await User.findOne({
+               email: req.user.email,
+               _id: req.user._id,
+          }).select("-password");
+          if (!user) {
+               return res.status(401).json({
+                    message: "User not loggedIn",
+                    success: false,
+               });
+          }
+
+          return res.status(200).json({
+               message: "get profile successfully",
+               success: true,
+               user: user,
+          });
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+
+     }
+}
+
+
 
 
 
@@ -173,7 +203,7 @@ export {
      loginUser,
      logoutUser,
      isVerify,
-     //   getProfile,
+    getProfile,
      //   forgotPassword,
      //   resetPassword,
      //   changePassword,
