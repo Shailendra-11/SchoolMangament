@@ -188,14 +188,220 @@ const getProfile = async (req, res) => {
      }
 }
 
+const forgotPassword = async (req, res) => {
+     const { email } = req.body;
+     if (!email) {
+          return res.status(401).json({
+               message: "Email is required for forget password",
+               sucess: false,
+          })
+     }
+     try {
+          const user = await User.findOne({ email }).select("-password")
+          if (!user) {
+               return res.status(401).json({
+                    message: "Email is invalid",
+                    sucess: false,
+               })
+          }
+          const token = crypto.randomBytes(30).toString("hex");
+          user.resetVerificationToken = token;
+          user.resetVerificationExpiry = Date.now() + 10 * 60 * 1000;
+          await user.save();
+          const options = {
+               email: email,
+               subject: "Reset Password",
+               route: "reset-password",
+               token: token,
+          };
 
+          await sendingEmail(options);
+          return res.status(200).json({
+               message: "Forgot password successfully",
+               success: true,
+               user: user,
+          });
 
-
-
-
-const logoutUser = (req, res) => {
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+     }
 
 }
+
+const resetPassword = async (req, res) => {
+     try {
+          const token = req.params?.token;
+          const { password } = req.body;
+
+          if (!token || !password) {
+               return res.status(400).json({
+                    message: "Invalid token and password",
+                    success: false,
+               });
+          }
+
+          const user = await User.findOne({ resetVerificationToken: token });
+
+          if (!user || user.resetVerificationExpiry < Date.now()) {
+               return res.status(404).json({
+                    message: "Invalid token",
+                    success: false,
+               });
+          }
+
+          const hashPassword = await bcrypt.hash(password, 10);
+          user.password = hashPassword;
+          user.resetVerificationToken = undefined;
+          user.resetVerificationExpiry = undefined;
+
+          await user.save();
+
+          return res.status(200).json({
+               message: "Reset password successfully",
+               success: true,
+               user: {
+                    name: user.name,
+                    email: user.email,
+                    isVerified: user.isVerified,
+                    role: user.role,
+                    _id: user._id,
+               },
+          });
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+     }
+};
+
+const logoutUser = async (req, res) => {
+     try {
+          res.status(200).cookie("token", "").json({
+               message: "User logout successfully",
+               success: true,
+          });
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+     }
+};
+
+const changePassword = async (req, res) => {
+     try {
+          const { oldPassword, newPassword } = req.body;
+
+          if (!oldPassword || !newPassword) {
+               return res.status(400).json({
+                    message: "All fields are required",
+                    success: false,
+               });
+          }
+
+          const user = await User.findOne({
+               email: req.user.email,
+               _id: req.user._id,
+          });
+
+          if (!user) {
+               return res.status(400).json({
+                    message: "Error for database",
+                    success: false,
+               });
+          }
+
+          const isMatch = await bcrypt.compare(oldPassword, user.password);
+
+          if (!isMatch) {
+               return res.status(401).json({
+                    message: "Old password invalid",
+                    success: false,
+               });
+          }
+
+          const hashPassword = await bcrypt.hash(newPassword, 10);
+
+          user.password = hashPassword;
+          await user.save();
+
+          return res.status(200).json({
+               message: "Password change successfully",
+               success: true,
+               user: {
+                    name: user.name,
+                    email: user.email,
+                    isVerified: user.isVerified,
+                    role: user.role,
+                    _id: user._id,
+               },
+          });
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+     }
+};
+
+const resendVerificationEmail = async (req, res) => {
+     try {
+          const token = crypto.randomBytes(30).toString("hex");
+
+          console.log("Token :- ", token);
+
+          // Sending Email
+
+          const user = await User.findOneAndUpdate(
+               { email: req.user.email, isVerified: false },
+               {
+                    emailVerificationToken: token,
+                    emailVerificationExpiry: Date.now() + 10 * 60 * 1000,
+               }
+          );
+
+          if (!user) {
+               return res.status(400).json({
+                    message: "Error for database",
+                    success: false,
+               });
+          }
+
+          const options = {
+               email: user.email,
+               subject: "Email verification",
+               route: "verify",
+               token: token,
+          };
+
+          await sendingEmail(options);
+
+          return res.status(201).json({
+               message: "Resend Verification Email successfully",
+               success: true,
+          });
+     } catch (error) {
+          console.log("Internel server error :- ", error);
+          return res.status(500).json({
+               message: "Internel server error",
+               success: false,
+               error: error.message,
+          });
+     }
+};
+
 
 
 export {
@@ -203,9 +409,9 @@ export {
      loginUser,
      logoutUser,
      isVerify,
-    getProfile,
-     //   forgotPassword,
-     //   resetPassword,
-     //   changePassword,
-     //   resendVerificationEmail,
+     getProfile,
+     forgotPassword,
+     resetPassword,
+     changePassword,
+     resendVerificationEmail,
 };
